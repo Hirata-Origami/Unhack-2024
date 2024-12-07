@@ -1,74 +1,77 @@
 import json
 
-machine = []
-step = {}
+machines = []
+steps = {}
 wafers = []
-output = {'schedule':[]}
+output = {'schedule': []}
 
 class Step:
-    def __init__(self,id,parameter,dependency):
+    def __init__(self, id, parameters, dependency):
         self.id = id
-        self.parameter = parameter
+        self.parameters = parameters
         self.dependency = dependency
 
 class Wafer:
-    def __init__(self,types,process):
-        self.type = types
+    def __init__(self, wafer_id, process):
+        self.wafer_id = wafer_id
         self.process = process
         self.time = 0
-    
-    def assignMachine(self):
-        for i in self.process.keys():
-            self.checkAndRun(i)
-            
-    def checkAndRun(self,steps):
-        for j in machine:
-                if j.time != 0:
-                    break
-                if j.step == steps:
-                    if step[steps][0] < j.current and j.current < step[steps][1]:
-                        j.assignStep()
-                        output['schedule'].append({'wafer_id':self.type,'step':step,'machine':j.id,'start_time':self.time,'end_time':self.time+j.time})
-                        self.time += j.time
-                        j.time = 0
-                        break 
 
-         
+    def assignMachine(self):
+        for step_id, duration in self.process.items():
+            print(self.wafer_id,step_id)
+            self.checkAndRun(step_id, duration)
+
+    def checkAndRun(self, step_id, duration):
+        while True:
+            for machine in machines:
+                if machine.step == step_id and machine.isAvailable(self.time):
+                    parameters = steps[step_id].parameters
+                    valid = all(parameters[key][0] <= machine.current[key] <= parameters[key][1] for key in parameters)
+                    if valid:
+                        start_time = max(self.time, machine.next_available_time)
+                        machine.assignStep(start_time, duration)
+                        output['schedule'].append({'wafer_id': self.wafer_id,'step': step_id,'machine': machine.id,'start_time': start_time,'end_time': start_time + duration})
+                        self.time = start_time + duration
+                        return
+            self.time += 1
 
 class Machine:
-    def __init__(self,id,step,cooldown,initial,fluctuation,n):
+    def __init__(self, id, step, cooldown, initial, fluctuation, n):
         self.id = id
         self.step = step
         self.cooldown = cooldown
         self.initial = initial
-        self.time = 0
+        self.current = initial
         self.fluctuation = fluctuation
         self.n = n
-        self.currentn = n
-        self.current = initial
-        
-    def assignStep(self):
-        self.currentn -= 1
-        self.current += self.fluctuation
-        if(self.currentn == -1):
-            self.time += self.cooldown
-        while(self.time!=0):
-            self.time += 1
-        
-   
+        self.current_n = n
+        self.next_available_time = 0
+
+    def isAvailable(self, current_time):
+        print(current_time,self.next_available_time)
+        return current_time >= self.next_available_time
+
+    def assignStep(self, start_time, duration):
+        self.current_n -= 1
+        if self.current_n == 0:
+            self.current_n = self.n
+            self.next_available_time = start_time + duration + self.cooldown
+            for key in self.current:
+                self.current[key] = self.initial[key]
+        else:
+            self.next_available_time = start_time + duration
 
 def main():
-    with open('Input/Milestone0.json', 'r') as file:
+    with open('Input/Milestone3b.json', 'r') as file:
         data = json.load(file)
-    for j in data['steps']:
-        step[j['id']] = [j['parameters'],j['dependency']] 
-    for j in data['machines']:
-        machine.append(Machine(j['machine_id'],j['step_id'],j['cooldown_time'],j['initial_parameters'],j['fluctuation'],j['n'])) 
+    for i in data['steps']:
+        steps[i['id']] = Step(i['id'], i['parameters'], i['dependency'])
+    for i in data['machines']:
+        machines.append(Machine(i['machine_id'],i['step_id'],i['cooldown_time'],i['initial_parameters'], i['fluctuation'],i['n']))
     for j in data['wafers']:
-        for k in range(1,j['quantity']+1):
-            wafers.append(Wafer(j['type']+"-"+str(k),j['processing_times']))
+        for i in range(1, j['quantity'] + 1):
+            wafers.append(Wafer(f"{j['type']}-{i}", j['processing_times']))
             wafers[-1].assignMachine()
     print(output)
-    
 main()
-        
